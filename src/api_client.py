@@ -127,30 +127,29 @@ def _parse_web_data(html: str):
     # Vinted migrated from Pages Router (__NEXT_DATA__) to App Router (RSC).
     # Item status is encoded in self.__next_f.push([1, "<escaped-json>"]) tags.
     # We concatenate all chunks and search for key fields.
-    rsc_chunks = re.findall(
-        r'self\.__next_f\.push\(\[1,(.*?)\]\)',
-        html,
-        re.DOTALL,
-    )
-    if rsc_chunks:
-        rsc_text = "".join(rsc_chunks)
-        # is_closed / isClosed
-        m_closed = re.search(r'"is_closed"\s*:\s*(true|false)', rsc_text)
-        if not m_closed:
-            m_closed = re.search(r'"isClosed"\s*:\s*(true|false)', rsc_text)
-        # item_closing_action
-        m_action = re.search(r'"item_closing_action"\s*:\s*"([^"]*)"', rsc_text)
-        if not m_action:
-            m_action = re.search(r'"itemClosingAction"\s*:\s*"([^"]*)"', rsc_text)
-        # can_buy (supplementary signal)
-        m_can_buy = re.search(r'"can_buy"\s*:\s*(true|false)', rsc_text)
+    # RSC data is embedded as escaped JS strings: \\"field\\" instead of "field"
+    # Search directly in the raw HTML for these escaped patterns.
+    rsc_present = bool(re.search(r'self\.__next_f\.push', html))
+    if rsc_present:
+        # Match both escaped form (\\"field\\":) and unescaped form ("field":)
+        m_closed = (
+            re.search(r'\\"is_closed\\"\s*:\s*(true|false)', html)
+            or re.search(r'"is_closed"\s*:\s*(true|false)', html)
+            or re.search(r'\\"isClosed\\"\s*:\s*(true|false)', html)
+            or re.search(r'"isClosed"\s*:\s*(true|false)', html)
+        )
+        m_action = (
+            re.search(r'\\"item_closing_action\\"\s*:\s*\\"([^"\\]*)\\"', html)
+            or re.search(r'"item_closing_action"\s*:\s*"([^"]*)"', html)
+            or re.search(r'\\"itemClosingAction\\"\s*:\s*\\"([^"\\]*)\\"', html)
+        )
 
         if m_closed:
             is_closed = m_closed.group(1) == "true"
             closing_action = (m_action.group(1) if m_action else "").lower()
             if is_closed:
-                # closed + action "sold" or empty → sold
-                if closing_action in ("sold", ""):
+                # closed + action "sold" or null/empty → sold; other action → deleted
+                if closing_action in ("sold", "null", ""):
                     return True, views, favourites, vinted_created_at, country_iso_code
                 else:
                     return False, views, favourites, vinted_created_at, country_iso_code
