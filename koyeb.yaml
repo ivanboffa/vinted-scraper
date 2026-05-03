@@ -1,0 +1,26 @@
+name: vinted-scraper
+services:
+  - name: scheduler
+    type: worker
+    instance_type: nano
+    regions:
+      - fra
+    docker:
+      dockerfile: Dockerfile
+    env:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DATABASE_URL
+        secret: true
+      - key: DB_SSL
+        value: "true"
+      - key: CONCURRENCY
+        value: "5"
+      - key: REQUEST_DELAY
+        value: "0.8"
+      - key: SCRAPE_INTERVAL_H
+        value: "2"
+      - key: STATUS_INTERVAL_H
+        value: "3"
+      - key: SOLD_INTERVAL_H
+        value: "12"

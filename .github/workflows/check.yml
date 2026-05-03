@@ -1,0 +1,31 @@
+name: Status Check
+
+on:
+  schedule:
+    - cron: '30 */3 * * *'   # ogni 3 ore (sfasato di 30min rispetto allo scrape)
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run status check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_SSL: "true"
+          CONCURRENCY: "5"
+          REQUEST_DELAY: "0.8"
+          PYTHONUNBUFFERED: "1"
+        run: python -u main.py check

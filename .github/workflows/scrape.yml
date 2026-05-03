@@ -1,0 +1,31 @@
+name: Scrape
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # ogni 2 ore
+  workflow_dispatch:          # avvio manuale dalla UI GitHub
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_SSL: "true"
+          CONCURRENCY: "5"
+          REQUEST_DELAY: "0.8"
+          PYTHONUNBUFFERED: "1"
+        run: python -u main.py scrape
