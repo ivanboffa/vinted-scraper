@@ -1,0 +1,9 @@
+# Lista proxy — uno per riga, formato: http://user:pass@host:port
+# Lascia vuoto per non usare proxy (funzionerà comunque, ma più lento e più rischio ban)
+#
+# Esempi:
+# http://user:pass@1.2.3.4:8080
+# http://1.2.3.4:3128
+#
+# Proxy gratuiti consigliati per test: webshare.io, proxyscrape.com
+# Per produzione: servizi a pagamento (Bright Data, Oxylabs, Smartproxy)

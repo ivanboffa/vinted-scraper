@@ -1,0 +1,14 @@
+.env
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+logs/
+*.log
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.DS_Store

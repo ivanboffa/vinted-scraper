@@ -1,0 +1,8 @@
+curl_cffi
+asyncpg
+psycopg2-binary
+python-dotenv
+playwright
+requests
+beautifulsoup4
+fake-useragent
