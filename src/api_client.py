@@ -109,24 +109,60 @@ def _parse_web_data(html: str):
     """
     Parse a Vinted item web page.
 
-    Vinted is a Next.js app — item data is embedded in __NEXT_DATA__ JSON.
+    Vinted uses Next.js App Router (RSC) — item status is embedded in
+    self.__next_f.push([1, "..."]) chunks, NOT in __NEXT_DATA__.
+
     Returns (sold, views, favourites, vinted_created_at, country_iso_code):
       sold:              True = sold, False = not sold, None = cannot determine
       views, favourites: int if found in page data, else None
-      vinted_created_at: datetime (UTC) or None
-      country_iso_code:  str ISO-3166-1 alpha-2 (e.g. "IT") or None
+      vinted_created_at: datetime (UTC) or None  (rarely available on web)
+      country_iso_code:  str ISO-3166-1 alpha-2   (rarely available on web)
     """
     views: int | None = None
     favourites: int | None = None
     vinted_created_at = None
     country_iso_code: str | None = None
 
-    # Primary: parse embedded Next.js page data
+    # ── Strategy 1: Next.js App Router RSC chunks ────────────────────────
+    # Vinted migrated from Pages Router (__NEXT_DATA__) to App Router (RSC).
+    # Item status is encoded in self.__next_f.push([1, "<escaped-json>"]) tags.
+    # We concatenate all chunks and search for key fields.
+    rsc_chunks = re.findall(
+        r'self\.__next_f\.push\(\[1,(.*?)\]\)',
+        html,
+        re.DOTALL,
+    )
+    if rsc_chunks:
+        rsc_text = "".join(rsc_chunks)
+        # is_closed / isClosed
+        m_closed = re.search(r'"is_closed"\s*:\s*(true|false)', rsc_text)
+        if not m_closed:
+            m_closed = re.search(r'"isClosed"\s*:\s*(true|false)', rsc_text)
+        # item_closing_action
+        m_action = re.search(r'"item_closing_action"\s*:\s*"([^"]*)"', rsc_text)
+        if not m_action:
+            m_action = re.search(r'"itemClosingAction"\s*:\s*"([^"]*)"', rsc_text)
+        # can_buy (supplementary signal)
+        m_can_buy = re.search(r'"can_buy"\s*:\s*(true|false)', rsc_text)
+
+        if m_closed:
+            is_closed = m_closed.group(1) == "true"
+            closing_action = (m_action.group(1) if m_action else "").lower()
+            if is_closed:
+                # closed + action "sold" or empty → sold
+                if closing_action in ("sold", ""):
+                    return True, views, favourites, vinted_created_at, country_iso_code
+                else:
+                    return False, views, favourites, vinted_created_at, country_iso_code
+            else:
+                # not closed → still active
+                return False, views, favourites, vinted_created_at, country_iso_code
+
+    # ── Strategy 2: Legacy __NEXT_DATA__ (Pages Router — kept for older pages) ──
     m = re.search(r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>', html, re.DOTALL)
     if m:
         try:
             data = _json.loads(m.group(1))
-            # Path varies across Vinted versions; check multiple candidates
             item = (
                 data.get("props", {}).get("pageProps", {}).get("item")
                 or data.get("props", {}).get("pageProps", {}).get("itemDto")
@@ -139,7 +175,6 @@ def _parse_web_data(html: str):
                     views = v
                 if isinstance(f, int):
                     favourites = f
-
                 vinted_created_at = _extract_vinted_created_at(item)
                 country_iso_code  = _extract_country(item)
 
@@ -149,24 +184,25 @@ def _parse_web_data(html: str):
                 if is_closed:
                     action = (item.get("item_closing_action") or "").lower()
                     return action in ("sold", ""), views, favourites, vinted_created_at, country_iso_code
-                # Field explicitly present and false → not sold
                 if "is_sold" in item or "isSold" in item:
                     return False, views, favourites, vinted_created_at, country_iso_code
         except Exception:
             pass
 
-    # Fallback: search raw JSON fragments in the page body
+    # ── Strategy 3: raw regex on full HTML ──────────────────────────────
     if re.search(r'"is_sold"\s*:\s*true', html) or re.search(r'"isSold"\s*:\s*true', html):
+        return True, views, favourites, vinted_created_at, country_iso_code
+    if re.search(r'"is_closed"\s*:\s*true', html):
         return True, views, favourites, vinted_created_at, country_iso_code
     if re.search(r'"is_sold"\s*:\s*false', html) or re.search(r'"isSold"\s*:\s*false', html):
         return False, views, favourites, vinted_created_at, country_iso_code
 
-    # Italian text indicators (visible page content)
+    # ── Strategy 4: Italian visible-text indicators ───────────────────────
     lower = html.lower()
     if "è stato venduto" in lower or "questo articolo è stato venduto" in lower:
         return True, views, favourites, vinted_created_at, country_iso_code
 
-    return None, views, favourites, vinted_created_at, country_iso_code  # cannot determine
+    return None, views, favourites, vinted_created_at, country_iso_code
 
 
 def _extract_csrf(html: str) -> str | None:
