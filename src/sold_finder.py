@@ -49,7 +49,7 @@ async def _reclassify_one(
 ) -> None:
     async with semaphore:
         await asyncio.sleep(_DELAY_BASE + random.uniform(0, _DELAY_JITTER))
-        web_status, views, favourites = await client.check_item_web(vinted_id)
+        web_status, views, favourites, created_at, country = await client.check_item_web(vinted_id)
 
     stats["checked"] += 1
 
@@ -67,8 +67,14 @@ async def _reclassify_one(
     else:
         stats["unknown"] += 1  # rate-limited, skip
 
-    if views is not None or favourites is not None:
-        await db.update_engagement(vinted_id, views, favourites)
+    if any(v is not None for v in (views, favourites, created_at, country)):
+        await db.update_item_details(
+            vinted_id,
+            views=views,
+            favourites=favourites,
+            vinted_created_at=created_at,
+            country_iso_code=country,
+        )
 
 
 async def reclassify_deleted(

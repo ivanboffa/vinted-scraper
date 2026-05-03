@@ -12,3 +12,8 @@ venv/
 dist/
 build/
 .DS_Store
+
+# Temporary data exports — never commit
+data/*.json
+data/*.csv
+data/*.xlsx
