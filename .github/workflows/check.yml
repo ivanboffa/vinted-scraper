@@ -2,7 +2,7 @@ name: Status Check
 
 on:
   schedule:
-    - cron: '30 */3 * * *'   # ogni 3 ore (sfasato di 30min rispetto allo scrape)
+    - cron: '30 * * * *'      # ogni ora (sfasato di 30min rispetto allo scrape)
   workflow_dispatch:
 
 jobs:
