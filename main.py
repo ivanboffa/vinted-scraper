@@ -81,7 +81,7 @@ async def _run_check() -> None:
             concurrency=config.CONCURRENCY,
             delay=config.REQUEST_DELAY,
         ) as client:
-            result = await run_status_check(client, db, limit=2500)
+            result = await run_status_check(client, db, limit=2500, oldest_first=config.OLDEST_FIRST)
             logger.info(
                 "DONE — checked=%d sold=%d deleted=%d errors=%d (%.1fs)",
                 result["checked"], result["sold"],

@@ -57,6 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_last_seen_at    ON articles (last_seen_a
 """
 
 # Migration: add new columns to existing tables that pre-date this schema version.
+# Statements are executed in order; errors are silently ignored (idempotent).
 MIGRATE_SQL = """
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS country_iso_code           TEXT NULL;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS seller_id                  TEXT NULL;
@@ -66,6 +67,13 @@ ALTER TABLE articles ADD COLUMN IF NOT EXISTS seller_feedback_reputation TEXT NU
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS description                TEXT NULL;
 CREATE INDEX IF NOT EXISTS idx_articles_country        ON articles (country_iso_code);
 CREATE INDEX IF NOT EXISTS idx_articles_vinted_created ON articles (vinted_created_at DESC);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS detection_era   TEXT    NOT NULL DEFAULT 'post_fix';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS sourced_as_sold BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE articles SET detection_era   = 'pre_fix' WHERE first_seen_at < '2026-05-04 00:00:00' AND detection_era = 'post_fix';
+UPDATE articles SET sourced_as_sold = TRUE WHERE status = 'sold' AND sold_at IS NOT NULL AND ABS(EXTRACT(EPOCH FROM (sold_at - first_seen_at))) < 60 AND sourced_as_sold = FALSE;
+CREATE INDEX IF NOT EXISTS idx_articles_detection_era  ON articles (detection_era);
+CREATE INDEX IF NOT EXISTS idx_articles_sourced_sold   ON articles (sourced_as_sold);
+CREATE OR REPLACE VIEW articles_clean AS SELECT * FROM articles WHERE detection_era = 'post_fix' AND sourced_as_sold = FALSE;
 """
 
 # On INSERT  → set first_seen_at, last_seen_at, status = 'active'

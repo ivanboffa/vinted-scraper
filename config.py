@@ -17,6 +17,9 @@ SCRAPE_INTERVAL_H = int(os.getenv("SCRAPE_INTERVAL_H", "2"))
 STATUS_INTERVAL_H = int(os.getenv("STATUS_INTERVAL_H", "3"))
 SOLD_INTERVAL_H   = int(os.getenv("SOLD_INTERVAL_H",  "12"))
 
+# Status-check order: True = oldest articles first (backlog recovery), False = newest first (default)
+OLDEST_FIRST = os.getenv("OLDEST_FIRST", "false").lower() == "true"
+
 # Categories to exclude (case-insensitive prefix match on category path).
 # Default: skip children and electronics, scrape only donna + uomo.
 _raw_exclude = os.getenv("EXCLUDE_CATEGORIES", "bambini,elettronica,casa,intrattenimento,animali")
