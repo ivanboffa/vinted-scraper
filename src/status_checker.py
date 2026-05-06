@@ -109,11 +109,12 @@ async def _check_one(
     db: AsyncDatabaseManager,
     semaphore: asyncio.Semaphore,
     stats: dict,
+    delay: float = _DELAY_BASE,
 ) -> None:
     """Check a single item and update the DB. Updates stats in-place."""
     async with semaphore:
-        delay = _DELAY_BASE + random.uniform(-_DELAY_SPREAD, _DELAY_SPREAD)
-        await asyncio.sleep(max(0.5, delay))
+        actual_delay = delay + random.uniform(-_DELAY_SPREAD, _DELAY_SPREAD)
+        await asyncio.sleep(max(0.3, actual_delay))
         status_code, body = await client.get_item(vinted_id)
 
     if status_code == 0:
@@ -194,13 +195,14 @@ async def _check_bucket(
     db: AsyncDatabaseManager,
     semaphore: asyncio.Semaphore,
     stats: dict,
+    delay: float = _DELAY_BASE,
 ) -> None:
     """Run checks for one age bucket, logging progress."""
     if not bucket:
         return
     logger.info("Status check — %s bucket: %d items", label, len(bucket))
     tasks = [
-        asyncio.create_task(_check_one(item["vinted_id"], client, db, semaphore, stats))
+        asyncio.create_task(_check_one(item["vinted_id"], client, db, semaphore, stats, delay=delay))
         for item in bucket
     ]
     await asyncio.gather(*tasks, return_exceptions=True)
@@ -213,6 +215,10 @@ async def run_status_check(
     db: AsyncDatabaseManager,
     limit: int = 2000,
     oldest_first: bool = False,
+    concurrency: int = _CONCURRENCY,
+    delay: float = _DELAY_BASE,
+    fresh_only: bool = False,
+    fresh_hours: int = 48,
 ) -> dict:
     """
     Check active articles for sold/deleted status.
@@ -223,6 +229,10 @@ async def run_status_check(
         limit:        max number of active articles to check per run.
         oldest_first: if True, check oldest articles first (most likely gone);
                       if False (default), check newest first (may sell quickly).
+        concurrency:  max simultaneous item-check requests (overrides _CONCURRENCY).
+        delay:        base seconds between requests per worker (overrides _DELAY_BASE).
+        fresh_only:   if True, only check articles seen within fresh_hours hours.
+        fresh_hours:  age threshold for fresh_only filter (default 48h).
 
     Returns:
         {
@@ -237,15 +247,20 @@ async def run_status_check(
     t0 = time.monotonic()
     stats: dict = {"checked": 0, "sold": 0, "deleted": 0, "errors": 0, "engagement_updated": 0}
 
-    items = await db.get_active_items(limit=limit, oldest_first=oldest_first)
+    items = await db.get_active_items(
+        limit=limit,
+        oldest_first=oldest_first,
+        fresh_only=fresh_only,
+        fresh_hours=fresh_hours,
+    )
     if not items:
         logger.info("Status check — no active items to check.")
         stats["duration_seconds"] = round(time.monotonic() - t0, 2)
         return stats
 
     logger.info(
-        "Status check — %d active items fetched (limit=%d, oldest_first=%s)",
-        len(items), limit, oldest_first,
+        "Status check — %d active items fetched (limit=%d, oldest_first=%s, fresh_only=%s, concurrency=%d, delay=%.1fs)",
+        len(items), limit, oldest_first, fresh_only, concurrency, delay,
     )
 
     fresh, recent, old = _age_buckets(items)
@@ -254,12 +269,12 @@ async def run_status_check(
         len(fresh), len(recent), len(old),
     )
 
-    # One shared semaphore across all buckets (global concurrency cap = 3)
-    semaphore = asyncio.Semaphore(_CONCURRENCY)
+    # One shared semaphore across all buckets
+    semaphore = asyncio.Semaphore(concurrency)
 
     # Process buckets in priority order — await each so fresh items finish first
     for bucket, label in [(fresh, "fresh"), (recent, "recent"), (old, "old")]:
-        await _check_bucket(bucket, label, client, db, semaphore, stats)
+        await _check_bucket(bucket, label, client, db, semaphore, stats, delay=delay)
 
     stats["duration_seconds"] = round(time.monotonic() - t0, 2)
     logger.info(

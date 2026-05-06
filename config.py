@@ -20,6 +20,13 @@ SOLD_INTERVAL_H   = int(os.getenv("SOLD_INTERVAL_H",  "12"))
 # Status-check order: True = oldest articles first (backlog recovery), False = newest first (default)
 OLDEST_FIRST = os.getenv("OLDEST_FIRST", "false").lower() == "true"
 
+# Max articles to check per status-check run (hourly workflow uses 5000)
+CHECK_LIMIT = int(os.getenv("CHECK_LIMIT", "5000"))
+
+# Fresh-only mode: only check articles seen within FRESH_HOURS (for the 30-min fresh-check workflow)
+FRESH_ONLY  = os.getenv("FRESH_ONLY", "false").lower() == "true"
+FRESH_HOURS = int(os.getenv("FRESH_HOURS", "48"))
+
 # Categories to exclude (case-insensitive prefix match on category path).
 # Default: skip children and electronics, scrape only donna + uomo.
 _raw_exclude = os.getenv("EXCLUDE_CATEGORIES", "bambini,elettronica,casa,intrattenimento,animali")

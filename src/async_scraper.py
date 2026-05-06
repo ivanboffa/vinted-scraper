@@ -143,7 +143,8 @@ def _parse_item(raw: dict, category_path: str) -> dict | None:
             "size":               raw.get("size_title") or raw.get("size") or "",
             "condition":          condition,
             "category":           category_path,
-            # lifecycle
+            # lifecycle — capture sold items directly from catalog when Vinted signals them
+            "is_sold":            bool(raw.get("is_sold", False)),
             "vinted_created_at":  vinted_created_at,
             # engagement — use explicit None check so that 0 is kept as 0, not dropped
             "photo_count":        photo_count,

@@ -112,6 +112,29 @@ ON CONFLICT (vinted_id) DO UPDATE SET
     -- first_seen_at, sold_at, status, views_count: intentionally NOT touched here
 """
 
+# Used for catalog items where Vinted signals is_sold=True.
+# New items: inserted with status='sold', sourced_as_sold=TRUE (excluded from articles_clean view
+# so they don't distort sell-rate stats — they were never tracked as active).
+# Existing active items: updated to status='sold', sold_at=NOW() (kept in articles_clean).
+SOLD_UPSERT_SQL = """
+INSERT INTO articles (
+    vinted_id, title, price, currency, url, image_url,
+    brand, size, condition, category,
+    vinted_created_at, photo_count, views_count, favourite_count,
+    seller_id, seller_item_count, seller_feedback_count, seller_feedback_reputation,
+    country_iso_code, description,
+    status, sourced_as_sold, first_seen_at, last_seen_at, sold_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+        $15, $16, $17, $18, $19, $20,
+        'sold', TRUE, NOW(), NOW(), NOW())
+ON CONFLICT (vinted_id) DO UPDATE SET
+    status       = 'sold',
+    sold_at      = COALESCE(articles.sold_at, NOW()),
+    last_seen_at = NOW()
+WHERE  articles.status != 'sold'
+"""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -166,12 +189,17 @@ class AsyncDatabaseManager:
     # ------------------------------------------------------------------
 
     async def insert_articles_batch(self, items: list[dict]) -> int:
-        """Upsert a batch of scraped article dicts. Returns count saved."""
+        """Upsert a batch of scraped article dicts. Returns count saved.
+
+        Items with is_sold=True are routed to SOLD_UPSERT_SQL (status='sold',
+        sourced_as_sold=TRUE for brand-new records; status updated for known ones).
+        All other items use the standard UPSERT_SQL (status='active' on first insert).
+        """
         if not items or self._pool is None:
             return 0
 
-        rows = [
-            (
+        def _row(item: dict) -> tuple:
+            return (
                 item.get("vinted_id"),
                 item.get("title"),
                 item.get("price"),
@@ -193,13 +221,20 @@ class AsyncDatabaseManager:
                 item.get("country_iso_code"),              # TEXT or None e.g. "IT"
                 item.get("description"),                   # TEXT or None
             )
-            for item in items
-        ]
+
+        active_rows = [_row(i) for i in items if not i.get("is_sold")]
+        sold_rows   = [_row(i) for i in items if i.get("is_sold")]
+
+        if sold_rows:
+            logger.info("Catalog sold items detected: %d — inserting with status='sold'", len(sold_rows))
 
         try:
             async with self._pool.acquire() as conn:
-                await conn.executemany(UPSERT_SQL, rows)
-            return len(rows)
+                if active_rows:
+                    await conn.executemany(UPSERT_SQL, active_rows)
+                if sold_rows:
+                    await conn.executemany(SOLD_UPSERT_SQL, sold_rows)
+            return len(active_rows) + len(sold_rows)
         except Exception as exc:
             logger.error("Batch insert error: %s", exc)
             return 0
@@ -208,17 +243,33 @@ class AsyncDatabaseManager:
     # Lifecycle reads
     # ------------------------------------------------------------------
 
-    async def get_active_items(self, limit: int = 1000, oldest_first: bool = False) -> list[dict]:
-        """Return active articles ordered by first_seen_at (DESC=newest, ASC=oldest)."""
+    async def get_active_items(
+        self,
+        limit: int = 1000,
+        oldest_first: bool = False,
+        fresh_only: bool = False,
+        fresh_hours: int = 48,
+    ) -> list[dict]:
+        """Return active articles ordered by first_seen_at (DESC=newest, ASC=oldest).
+
+        Args:
+            limit:       max rows to return.
+            oldest_first: if True, return oldest articles first (backlog recovery).
+            fresh_only:  if True, only return articles seen within fresh_hours hours
+                         (used by the fresh-check workflow to prioritise recent items).
+            fresh_hours: age threshold in hours for the fresh_only filter.
+        """
         if self._pool is None:
             return []
         order = "ASC" if oldest_first else "DESC"
+        fresh_clause = f"AND first_seen_at >= NOW() - INTERVAL '{int(fresh_hours)} hours'" if fresh_only else ""
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 f"""
                 SELECT *
                 FROM   articles
                 WHERE  status = 'active'
+                {fresh_clause}
                 ORDER  BY first_seen_at {order}
                 LIMIT  $1
                 """,

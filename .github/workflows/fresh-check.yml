@@ -1,14 +1,14 @@
-name: Status Check
+name: Fresh Items Check
 
 on:
   schedule:
-    - cron: '30 * * * *'      # ogni ora (sfasato di 30min rispetto allo scrape)
+    - cron: '*/30 * * * *'   # ogni 30 minuti — controlla solo articoli < 48h
   workflow_dispatch:
 
 jobs:
-  check:
+  fresh-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 55        # 2500 items ~30min + margine per web-check su 404
+    timeout-minutes: 25      # articoli freschi sono pochi → finisce in < 15 min
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -24,12 +24,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run status check
+      - name: Check fresh items (< 48h)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DB_SSL: "true"
           CONCURRENCY: "5"
           REQUEST_DELAY: "0.8"
-          CHECK_LIMIT: "5000"
+          CHECK_LIMIT: "2000"
+          FRESH_ONLY: "true"
+          FRESH_HOURS: "48"
           PYTHONUNBUFFERED: "1"
         run: python -u main.py check
