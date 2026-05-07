@@ -137,7 +137,6 @@ def _parse_item(raw: dict, category_path: str) -> dict | None:
             "title":              raw.get("title"),
             "price":              price,
             "currency":           (price_field.get("currency_code") if isinstance(price_field, dict) else None) or raw.get("currency") or "EUR",
-            "url":                raw.get("url") or f"https://www.vinted.it/items/{raw['id']}",
             "image_url":          image_url,
             "brand":              raw.get("brand_title") or raw.get("brand") or "",
             "size":               raw.get("size_title") or raw.get("size") or "",
@@ -155,8 +154,6 @@ def _parse_item(raw: dict, category_path: str) -> dict | None:
             "seller_item_count":  user.get("items_count") or None,
             "seller_feedback_count":      user.get("feedback_count") or None,
             "seller_feedback_reputation": user.get("feedback_reputation") or None,
-            # description
-            "description":        raw.get("description") or None,
             # location
             "country_iso_code":   country_iso_code or None,
         }

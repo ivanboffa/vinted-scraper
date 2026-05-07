@@ -27,6 +27,9 @@ CHECK_LIMIT = int(os.getenv("CHECK_LIMIT", "5000"))
 FRESH_ONLY  = os.getenv("FRESH_ONLY", "false").lower() == "true"
 FRESH_HOURS = int(os.getenv("FRESH_HOURS", "48"))
 
+# Retention: delete active articles older than this many days (0 = disabled)
+RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
+
 # Categories to exclude (case-insensitive prefix match on category path).
 # Default: skip children and electronics, scrape only donna + uomo.
 _raw_exclude = os.getenv("EXCLUDE_CATEGORIES", "bambini,elettronica,casa,intrattenimento,animali")

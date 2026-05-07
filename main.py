@@ -111,6 +111,19 @@ async def _run_scheduler() -> None:
         await db.close()
 
 
+async def _run_cleanup() -> None:
+    """Delete active articles older than RETENTION_DAYS (retention policy)."""
+    if config.RETENTION_DAYS <= 0:
+        logger.info("Cleanup skipped — RETENTION_DAYS=%d", config.RETENTION_DAYS)
+        return
+    db = await _make_db()
+    try:
+        count = await db.cleanup_old_active(days=config.RETENTION_DAYS)
+        logger.info("DONE — deleted %d articles (retention=%d days)", count, config.RETENTION_DAYS)
+    finally:
+        await db.close()
+
+
 async def _run_sold_finder() -> None:
     """
     Due strategie per trovare articoli venduti:
@@ -147,13 +160,14 @@ _MODES = {
     "check":     _run_check,
     "scheduler": _run_scheduler,
     "sold":      _run_sold_finder,
+    "cleanup":   _run_cleanup,
 }
 
 
 def _parse_args() -> str:
     parser = argparse.ArgumentParser(
         prog="main.py",
-        description="Vinted scraper — available modes: scrape | check | scheduler | sold",
+        description="Vinted scraper — available modes: scrape | check | scheduler | sold | cleanup",
     )
     parser.add_argument(
         "mode",

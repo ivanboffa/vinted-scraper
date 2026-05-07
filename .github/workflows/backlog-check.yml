@@ -33,3 +33,11 @@ jobs:
           OLDEST_FIRST: "true"
           PYTHONUNBUFFERED: "1"
         run: python -u main.py check
+
+      - name: Cleanup old active articles (7-day retention)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_SSL: "true"
+          RETENTION_DAYS: "7"
+          PYTHONUNBUFFERED: "1"
+        run: python -u main.py cleanup

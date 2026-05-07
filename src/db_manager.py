@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS articles (
     title             TEXT,
     price             NUMERIC,
     currency          TEXT,
-    url               TEXT,
     image_url         TEXT,
     brand             TEXT,
     size              TEXT,
@@ -41,10 +40,7 @@ CREATE TABLE IF NOT EXISTS articles (
     -- engagement
     photo_count       INT         NULL,
     views_count       INT         NULL,
-    favourite_count   INT         NULL,
-
-    -- listing content
-    description       TEXT        NULL
+    favourite_count   INT         NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_category        ON articles (category);
@@ -81,15 +77,15 @@ CREATE OR REPLACE VIEW articles_clean AS SELECT * FROM articles WHERE detection_
 #               NEVER touch first_seen_at, sold_at, status
 UPSERT_SQL = """
 INSERT INTO articles (
-    vinted_id, title, price, currency, url, image_url,
+    vinted_id, title, price, currency, image_url,
     brand, size, condition, category,
     vinted_created_at, photo_count, views_count, favourite_count,
     seller_id, seller_item_count, seller_feedback_count, seller_feedback_reputation,
-    country_iso_code, description,
+    country_iso_code,
     status, first_seen_at, last_seen_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-        $15, $16, $17, $18, $19, $20,
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18,
         'active', NOW(), NOW())
 ON CONFLICT (vinted_id) DO UPDATE SET
     title                      = EXCLUDED.title,
@@ -107,7 +103,6 @@ ON CONFLICT (vinted_id) DO UPDATE SET
     seller_feedback_count      = COALESCE(EXCLUDED.seller_feedback_count,      articles.seller_feedback_count),
     seller_feedback_reputation = COALESCE(EXCLUDED.seller_feedback_reputation, articles.seller_feedback_reputation),
     country_iso_code           = COALESCE(EXCLUDED.country_iso_code,           articles.country_iso_code),
-    description                = COALESCE(EXCLUDED.description,                articles.description),
     last_seen_at               = NOW()
     -- first_seen_at, sold_at, status, views_count: intentionally NOT touched here
 """
@@ -118,15 +113,15 @@ ON CONFLICT (vinted_id) DO UPDATE SET
 # Existing active items: updated to status='sold', sold_at=NOW() (kept in articles_clean).
 SOLD_UPSERT_SQL = """
 INSERT INTO articles (
-    vinted_id, title, price, currency, url, image_url,
+    vinted_id, title, price, currency, image_url,
     brand, size, condition, category,
     vinted_created_at, photo_count, views_count, favourite_count,
     seller_id, seller_item_count, seller_feedback_count, seller_feedback_reputation,
-    country_iso_code, description,
+    country_iso_code,
     status, sourced_as_sold, first_seen_at, last_seen_at, sold_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-        $15, $16, $17, $18, $19, $20,
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18,
         'sold', TRUE, NOW(), NOW(), NOW())
 ON CONFLICT (vinted_id) DO UPDATE SET
     status       = 'sold',
@@ -204,7 +199,6 @@ class AsyncDatabaseManager:
                 item.get("title"),
                 item.get("price"),
                 item.get("currency", "EUR"),
-                item.get("url"),
                 item.get("image_url"),
                 item.get("brand", ""),
                 item.get("size", ""),
@@ -219,7 +213,6 @@ class AsyncDatabaseManager:
                 item.get("seller_feedback_count"),         # INT or None
                 item.get("seller_feedback_reputation"),    # TEXT or None
                 item.get("country_iso_code"),              # TEXT or None e.g. "IT"
-                item.get("description"),                   # TEXT or None
             )
 
         active_rows = [_row(i) for i in items if not i.get("is_sold")]
@@ -399,6 +392,26 @@ class AsyncDatabaseManager:
                 )
         except Exception as exc:
             logger.error("update_item_details %s failed: %s", vinted_id, exc)
+
+    async def cleanup_old_active(self, days: int = 7) -> int:
+        """Delete active articles older than `days` days (retention policy).
+
+        Returns the number of rows deleted.
+        """
+        if self._pool is None:
+            return 0
+        async with self._pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM articles
+                WHERE  status = 'active'
+                  AND  first_seen_at < NOW() - ($1 * INTERVAL '1 day')
+                """,
+                days,
+            )
+        count = int(result.split()[-1])
+        logger.info("Cleanup: deleted %d active articles older than %d days", count, days)
+        return count
 
     # ------------------------------------------------------------------
     # Teardown
