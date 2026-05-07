@@ -111,72 +111,35 @@ async def _check_one(
     stats: dict,
     delay: float = _DELAY_BASE,
 ) -> None:
-    """Check a single item and update the DB. Updates stats in-place."""
+    """Check a single item via web scraping and update the DB.
+
+    Uses check_item_web (HTML page) instead of the individual item API
+    (GET /api/v2/items/{id}), which is heavily rate-limited/blocked from
+    GitHub Actions IP ranges (88% curl timeout rate observed).
+    Web scraping has ~74% success rate vs ~12% for the API.
+    """
     async with semaphore:
         actual_delay = delay + random.uniform(-_DELAY_SPREAD, _DELAY_SPREAD)
         await asyncio.sleep(max(0.3, actual_delay))
-        status_code, body = await client.get_item(vinted_id)
-
-    if status_code == 0:
-        stats["errors"] += 1
-        return
-
-    if status_code in (404, 410):
-        # API returns 404 for BOTH sold items and items deleted by the seller.
-        # Check the web page to distinguish the two cases.
         web_status, views, favourites, created_at, country = await client.check_item_web(vinted_id)
-        stats["checked"] += 1
-        if web_status == "sold":
-            await db.mark_as_sold(vinted_id)
-            stats["sold"] += 1
-            logger.info("SOLD (web) %s", vinted_id)
-        elif web_status == "deleted":
-            # 404 on both API and web → truly removed by seller
-            await db.mark_as_deleted(vinted_id)
-            stats["deleted"] += 1
-        # "unknown" (web rate-limited) → leave status unchanged, retry next run
-        if any(v is not None for v in (views, favourites, created_at, country)):
-            await db.update_item_details(
-                vinted_id,
-                views=views,
-                favourites=favourites,
-                vinted_created_at=created_at,
-                country_iso_code=country,
-            )
-            stats["engagement_updated"] += 1
-        return
 
-    if status_code in (403, 429):
-        # Rate-limited or forbidden — skip, retry at next run
+    if web_status == "unknown":
+        # Web page rate-limited or unparseable → skip, retry at next run
         stats["errors"] += 1
         return
 
-    if status_code != 200 or body is None:
-        stats["errors"] += 1
-        logger.warning("Unexpected HTTP %s for item %s", status_code, vinted_id)
-        return
-
-    outcome = _parse_sold_status(body)
     stats["checked"] += 1
 
-    if outcome == "sold":
+    if web_status == "sold":
         await db.mark_as_sold(vinted_id)
         stats["sold"] += 1
-        logger.info("SOLD %s", vinted_id)
-    elif outcome == "deleted":
+        logger.info("SOLD (web) %s", vinted_id)
+    elif web_status == "deleted":
         await db.mark_as_deleted(vinted_id)
         stats["deleted"] += 1
-        logger.info("DELETED (closed) %s", vinted_id)
-    # outcome == "active" → still alive, update engagement stats
+        logger.info("DELETED (web) %s", vinted_id)
+    # web_status == "active" → still listed, no DB update needed
 
-    # Always update enrichment fields from the individual-item response —
-    # the catalog API returns view_count=0 and no country/timestamp.
-    from .api_client import _extract_country, _extract_vinted_created_at
-    item = body.get("item") or body
-    views        = item.get("view_count") or item.get("views_count")
-    favourites   = item.get("favourite_count") or item.get("favorites_count")
-    created_at   = _extract_vinted_created_at(item)
-    country      = _extract_country(item)
     if any(v is not None for v in (views, favourites, created_at, country)):
         await db.update_item_details(
             vinted_id,
