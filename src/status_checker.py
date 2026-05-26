@@ -182,20 +182,23 @@ async def run_status_check(
     delay: float = _DELAY_BASE,
     fresh_only: bool = False,
     fresh_hours: int = 48,
+    min_age_hours: int = 0,
 ) -> dict:
     """
     Check active articles for sold/deleted status.
 
     Args:
-        client:       existing VintedAPIClient (must be inside its async context).
-        db:           existing AsyncDatabaseManager (must be connected).
-        limit:        max number of active articles to check per run.
-        oldest_first: if True, check oldest articles first (most likely gone);
-                      if False (default), check newest first (may sell quickly).
-        concurrency:  max simultaneous item-check requests (overrides _CONCURRENCY).
-        delay:        base seconds between requests per worker (overrides _DELAY_BASE).
-        fresh_only:   if True, only check articles seen within fresh_hours hours.
-        fresh_hours:  age threshold for fresh_only filter (default 48h).
+        client:        existing VintedAPIClient (must be inside its async context).
+        db:            existing AsyncDatabaseManager (must be connected).
+        limit:         max number of active articles to check per run.
+        oldest_first:  if True, check oldest articles first (most likely gone);
+                       if False (default), check newest first (may sell quickly).
+        concurrency:   max simultaneous item-check requests (overrides _CONCURRENCY).
+        delay:         base seconds between requests per worker (overrides _DELAY_BASE).
+        fresh_only:    if True, only check articles seen within fresh_hours hours.
+        fresh_hours:   age threshold for fresh_only filter (default 48h).
+        min_age_hours: if > 0, skip articles newer than this many hours
+                       (used by mid-check to target the 48h–7d age band).
 
     Returns:
         {
@@ -215,6 +218,7 @@ async def run_status_check(
         oldest_first=oldest_first,
         fresh_only=fresh_only,
         fresh_hours=fresh_hours,
+        min_age_hours=min_age_hours,
     )
     if not items:
         logger.info("Status check — no active items to check.")
@@ -222,8 +226,8 @@ async def run_status_check(
         return stats
 
     logger.info(
-        "Status check — %d active items fetched (limit=%d, oldest_first=%s, fresh_only=%s, concurrency=%d, delay=%.1fs)",
-        len(items), limit, oldest_first, fresh_only, concurrency, delay,
+        "Status check — %d active items fetched (limit=%d, oldest_first=%s, fresh_only=%s, min_age_hours=%d, concurrency=%d, delay=%.1fs)",
+        len(items), limit, oldest_first, fresh_only, min_age_hours, concurrency, delay,
     )
 
     fresh, recent, old = _age_buckets(items)

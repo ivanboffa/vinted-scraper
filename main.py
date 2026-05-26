@@ -89,6 +89,7 @@ async def _run_check() -> None:
                 delay=config.REQUEST_DELAY,
                 fresh_only=config.FRESH_ONLY,
                 fresh_hours=config.FRESH_HOURS,
+                min_age_hours=config.MIN_AGE_HOURS,
             )
             logger.info(
                 "DONE — checked=%d sold=%d deleted=%d errors=%d (%.1fs)",

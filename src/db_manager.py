@@ -242,27 +242,34 @@ class AsyncDatabaseManager:
         oldest_first: bool = False,
         fresh_only: bool = False,
         fresh_hours: int = 48,
+        min_age_hours: int = 0,
     ) -> list[dict]:
         """Return active articles ordered by first_seen_at (DESC=newest, ASC=oldest).
 
         Args:
-            limit:       max rows to return.
-            oldest_first: if True, return oldest articles first (backlog recovery).
-            fresh_only:  if True, only return articles seen within fresh_hours hours
-                         (used by the fresh-check workflow to prioritise recent items).
-            fresh_hours: age threshold in hours for the fresh_only filter.
+            limit:         max rows to return.
+            oldest_first:  if True, return oldest articles first (backlog recovery).
+            fresh_only:    if True, only return articles seen within fresh_hours hours.
+            fresh_hours:   age threshold in hours for the fresh_only filter.
+            min_age_hours: if > 0, exclude articles newer than this many hours
+                           (used by mid-check to target the 48h–7d age band).
         """
         if self._pool is None:
             return []
         order = "ASC" if oldest_first else "DESC"
-        fresh_clause = f"AND first_seen_at >= NOW() - INTERVAL '{int(fresh_hours)} hours'" if fresh_only else ""
+        clauses = []
+        if fresh_only:
+            clauses.append(f"AND first_seen_at >= NOW() - INTERVAL '{int(fresh_hours)} hours'")
+        if min_age_hours > 0:
+            clauses.append(f"AND first_seen_at < NOW() - INTERVAL '{int(min_age_hours)} hours'")
+        extra = " ".join(clauses)
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 f"""
                 SELECT *
                 FROM   articles
                 WHERE  status = 'active'
-                {fresh_clause}
+                {extra}
                 ORDER  BY first_seen_at {order}
                 LIMIT  $1
                 """,

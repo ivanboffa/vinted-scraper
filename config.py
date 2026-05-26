@@ -27,6 +27,9 @@ CHECK_LIMIT = int(os.getenv("CHECK_LIMIT", "5000"))
 FRESH_ONLY  = os.getenv("FRESH_ONLY", "false").lower() == "true"
 FRESH_HOURS = int(os.getenv("FRESH_HOURS", "48"))
 
+# Min-age mode: skip articles newer than MIN_AGE_HOURS (for mid-check targeting 48h–7d items)
+MIN_AGE_HOURS = int(os.getenv("MIN_AGE_HOURS", "0"))
+
 # Retention: delete active articles older than this many days (0 = disabled)
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 
