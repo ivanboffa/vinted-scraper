@@ -1,8 +1,8 @@
 name: Sold Finder
 
 on:
-  schedule:
-    - cron: '0 */12 * * *'   # ogni 12 ore
+  # Scheduled runs are intentionally disabled: the project is archived and the
+  # database it wrote to no longer exists. Kept dispatch-only for reference.
   workflow_dispatch:
 
 jobs:

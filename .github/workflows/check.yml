@@ -1,8 +1,8 @@
 name: Status Check
 
 on:
-  schedule:
-    - cron: '30 * * * *'      # ogni ora (sfasato di 30min rispetto allo scrape)
+  # Scheduled runs are intentionally disabled: the project is archived and the
+  # database it wrote to no longer exists. Kept dispatch-only for reference.
   workflow_dispatch:
 
 jobs:
