@@ -6,6 +6,11 @@ import asyncio, sys, time
 sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
 
+# This script lives in a subdirectory; add the repository root to sys.path so
+# `config` and `src` resolve regardless of the working directory.
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import config
 from src.api_client import VintedAPIClient
 from src.db_manager import AsyncDatabaseManager
@@ -33,4 +38,5 @@ async def main():
     total = round(time.monotonic()-t0)
     print(f"\nDone in {total//60}m {total%60}s")
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

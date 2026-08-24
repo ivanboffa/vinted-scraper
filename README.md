@@ -1,5 +1,8 @@
 # Vinted Scraper
 
+[![Tests](https://github.com/ivanboffa/vinted-scraper/actions/workflows/tests.yml/badge.svg)](https://github.com/ivanboffa/vinted-scraper/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A production-grade data pipeline that tracked the **full lifecycle of second-hand
 clothing listings** on [vinted.it](https://www.vinted.it) — from the moment an item
 appeared in the catalog to the moment it sold or was withdrawn — in order to answer
@@ -95,7 +98,7 @@ flowchart TD
     cleanup -->|"drop stale active listings"| db
 
     db --> view
-    view --> analysis["analyze_sales.py — offline analysis"]
+    view --> analysis["analysis/ — offline analysis scripts"]
 ```
 
 ### The four jobs
@@ -142,6 +145,18 @@ every connect, so a redeploy never requires a manual migration step.
 
 ---
 
+## Project layout
+
+```
+main.py            CLI entry point — scrape | check | sold | cleanup | scheduler
+config.py          environment-driven configuration
+src/               pipeline modules
+analysis/          offline analysis over the collected dataset
+scripts/           one-off operational runners
+tests/             offline test suite
+.github/workflows/ test workflow, plus the archived pipeline jobs
+```
+
 ## Running it
 
 The pipeline needs a PostgreSQL database. The original one no longer exists, so a fresh
@@ -171,11 +186,24 @@ Containerised deployment uses the [`Dockerfile`](Dockerfile), with
 
 | Script | Purpose |
 |---|---|
-| [`analyze_sales.py`](analyze_sales.py) | Sold-vs-active comparison across price, brand, category, condition, and engagement |
-| [`analyze_sales2.py`](analyze_sales2.py) | Deeper dives: price × category matrix, size sell rates, seller buckets, title keywords |
-| [`bulk_status_check.py`](bulk_status_check.py) | Many consecutive check cycles, to maximise sold detection in one sitting |
-| [`grow_to_200k.py`](grow_to_200k.py) | Scrape-and-check loop to a target corpus size, pausing when the API blocks |
-| [`run_full_cycle.py`](run_full_cycle.py) | Full cycle: scrape, then dual newest-plus-oldest verification pass |
+| [`analysis/sales_overview.py`](analysis/sales_overview.py) | Sold-vs-active comparison across price, brand, category, condition, and engagement |
+| [`analysis/sales_deep_dive.py`](analysis/sales_deep_dive.py) | Price × category matrix, size sell rates, seller buckets, title keywords |
+| [`scripts/bulk_status_check.py`](scripts/bulk_status_check.py) | Many consecutive check cycles, to maximise sold detection in one sitting |
+| [`scripts/grow_corpus.py`](scripts/grow_corpus.py) | Scrape-and-check loop to a target corpus size, pausing when the API blocks |
+| [`scripts/run_full_cycle.py`](scripts/run_full_cycle.py) | Full cycle: scrape, then dual newest-plus-oldest verification pass |
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite in [`tests/`](tests/) runs offline — no database, no network. It covers the
+parts where a silent mistake would corrupt the dataset rather than raise: lifecycle
+precedence in `_parse_sold_status`, sold detection across both Next.js eras, catalog
+normalisation edge cases, category filtering, and the rate-limiter and circuit-breaker
+behaviour.
 
 ---
 
@@ -187,3 +215,7 @@ Python 3.11 · asyncio · asyncpg · PostgreSQL · curl_cffi · Docker · GitHub
 
 Built for personal research on a public catalog. Requests are rate-limited, jittered,
 and circuit-broken to stay well below any load a normal browsing session would generate.
+
+## License
+
+[MIT](LICENSE)
