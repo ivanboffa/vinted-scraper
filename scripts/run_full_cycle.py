@@ -16,6 +16,11 @@ import time
 sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
 
+# This script lives in a subdirectory; add the repository root to sys.path so
+# `config` and `src` resolve regardless of the working directory.
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import config
 from src.api_client import VintedAPIClient
 from src.async_scraper import run_full_scrape
@@ -131,4 +136,5 @@ async def main() -> None:
     print(f"\nTempo totale: {total_elapsed//60}m {total_elapsed%60}s", flush=True)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -5,6 +5,11 @@ Compares sold vs active articles across all available dimensions.
 import asyncio, sys, json, math
 sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 
+# This script lives in a subdirectory; add the repository root to sys.path so
+# `config` and `src` resolve regardless of the working directory.
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import config
 from src.db_manager import AsyncDatabaseManager
 
@@ -277,4 +282,5 @@ async def main():
 
     await db.close()
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

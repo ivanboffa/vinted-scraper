@@ -1,8 +1,4 @@
-curl_cffi
-asyncpg
-psycopg2-binary
-python-dotenv
-playwright
-requests
-beautifulsoup4
-fake-useragent
+curl_cffi        # TLS-level Chrome impersonation
+asyncpg          # async PostgreSQL driver (scraper, checkers)
+psycopg2-binary  # sync PostgreSQL driver (one-off queries)
+python-dotenv    # .env loading
